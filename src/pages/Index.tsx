@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 const LABELS = [
   "Родилась", "1 месяц", "2 месяца", "3 месяца",
@@ -6,24 +6,138 @@ const LABELS = [
   "8 месяцев", "9 месяцев", "10 месяцев", "11 месяцев",
 ];
 
-// 5-col × 7-row grid. Small ovals around the perimeter, center area for big photo + name
 const POSITIONS: { col: number; row: number; idx: number }[] = [
-  { col: 0, row: 0, idx: 0 },   // Родилась
-  { col: 1, row: 0, idx: 1 },   // 1 месяц
-  { col: 2, row: 0, idx: 2 },   // 2 месяца
-  { col: 3, row: 0, idx: 3 },   // 3 месяца
-  { col: 3, row: 2, idx: 4 },   // 4 месяца
-  { col: 3, row: 3, idx: 5 },   // 5 месяцев
-  { col: 3, row: 4, idx: 6 },   // 6 месяцев
-  { col: 2, row: 6, idx: 7 },   // 7 месяцев
-  { col: 1, row: 6, idx: 8 },   // 8 месяцев
-  { col: 0, row: 4, idx: 9 },   // 9 месяцев
-  { col: 0, row: 3, idx: 10 },  // 10 месяцев
-  { col: 0, row: 2, idx: 11 },  // 11 месяцев
+  { col: 0, row: 0, idx: 0 },
+  { col: 1, row: 0, idx: 1 },
+  { col: 2, row: 0, idx: 2 },
+  { col: 3, row: 0, idx: 3 },
+  { col: 3, row: 2, idx: 4 },
+  { col: 3, row: 3, idx: 5 },
+  { col: 3, row: 4, idx: 6 },
+  { col: 2, row: 6, idx: 7 },
+  { col: 1, row: 6, idx: 8 },
+  { col: 0, row: 4, idx: 9 },
+  { col: 0, row: 3, idx: 10 },
+  { col: 0, row: 2, idx: 11 },
 ];
 
+interface PhotoState {
+  src: string;
+  x: number; // offset % from center
+  y: number;
+  scale: number;
+}
+
+// Inner component: oval with drag + pinch/wheel zoom
+function OvalPhoto({
+  photo, onLoad, size = "small"
+}: {
+  photo: PhotoState | null;
+  onLoad: () => void;
+  size?: "small" | "large";
+}) {
+  const [pos, setPos] = useState({ x: 0, y: 0, scale: 1.6 });
+  const dragging = useRef(false);
+  const last = useRef({ x: 0, y: 0 });
+  const frameRef = useRef<HTMLDivElement>(null);
+  const prevDist = useRef<number | null>(null);
+
+  // Reset position when new photo loaded
+  useEffect(() => {
+    if (photo) setPos({ x: photo.x, y: photo.y, scale: photo.scale });
+  }, [photo?.src]);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (!photo) return;
+    e.preventDefault();
+    dragging.current = true;
+    last.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging.current || !photo) return;
+    const dx = e.clientX - last.current.x;
+    const dy = e.clientY - last.current.y;
+    last.current = { x: e.clientX, y: e.clientY };
+    setPos(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+  }, [photo]);
+
+  const onMouseUp = () => { dragging.current = false; };
+
+  const onWheel = (e: React.WheelEvent) => {
+    if (!photo) return;
+    e.preventDefault();
+    setPos(p => ({ ...p, scale: Math.min(5, Math.max(1, p.scale - e.deltaY * 0.005)) }));
+  };
+
+  // Touch drag + pinch
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (!photo) return;
+    if (e.touches.length === 1) {
+      last.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      prevDist.current = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!photo) return;
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const dx = e.touches[0].clientX - last.current.x;
+      const dy = e.touches[0].clientY - last.current.y;
+      last.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      setPos(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+    } else if (e.touches.length === 2 && prevDist.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const delta = dist - prevDist.current;
+      prevDist.current = dist;
+      setPos(p => ({ ...p, scale: Math.min(5, Math.max(1, p.scale + delta * 0.01)) }));
+    }
+  };
+
+  const onTouchEnd = () => { prevDist.current = null; };
+
+  if (!photo) return null;
+
+  return (
+    <div
+      ref={frameRef}
+      className={size === "large" ? "crop-area-large" : "crop-area"}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
+      onWheel={onWheel}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{ cursor: "grab", userSelect: "none" }}
+    >
+      <img
+        src={photo.src}
+        alt=""
+        className="crop-img"
+        style={{
+          transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px)) scale(${pos.scale})`,
+          transformOrigin: "center center",
+        }}
+        onLoad={onLoad}
+        draggable={false}
+      />
+      <div className="crop-hint">↔ двигай · 🔍 зум</div>
+    </div>
+  );
+}
+
 export default function Index() {
-  const [photos, setPhotos] = useState<(string | null)[]>(Array(13).fill(null));
+  const [photos, setPhotos] = useState<(PhotoState | null)[]>(Array(13).fill(null));
   const [babyName, setBabyName] = useState("Анюта");
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("Анюта");
@@ -45,7 +159,11 @@ export default function Index() {
     if (!file || activeSlot === null) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setPhotos(prev => prev.map((p, i) => i === activeSlot ? ev.target?.result as string : p));
+      setPhotos(prev => prev.map((p, i) =>
+        i === activeSlot
+          ? { src: ev.target?.result as string, x: 0, y: 0, scale: 1.6 }
+          : p
+      ));
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -58,14 +176,8 @@ export default function Index() {
     setEditingField(null);
   };
 
-  const startEditField = (field: "date" | "weight" | "time", val: string) => {
-    setEditingField(field);
-    setFieldInput(val);
-  };
-
   return (
     <div className="poster-root">
-      {/* Scattered hearts */}
       <div className="hearts-layer" aria-hidden="true">
         {[5,12,20,28,38,48,55,62,70,78,85,92,8,18,35,52,72,88].map((l, i) => (
           <span key={i} className="deco-heart" style={{
@@ -77,7 +189,6 @@ export default function Index() {
         ))}
       </div>
 
-      {/* Corner flower decorations */}
       <div className="flower-corner tl" aria-hidden="true" />
       <div className="flower-corner tr" aria-hidden="true" />
       <div className="flower-corner bl" aria-hidden="true" />
@@ -86,44 +197,46 @@ export default function Index() {
       <div className="poster-inner">
         <div className="photo-layout">
 
-          {/* 12 small oval slots around perimeter */}
           {POSITIONS.map(({ col, row, idx }) => (
             <div
               key={idx}
               className="oval-slot"
               style={{ gridColumn: col + 1, gridRow: row + 1 }}
-              onClick={() => openPhoto(idx)}
             >
-              <div className="oval-frame">
-                {photos[idx]
-                  ? <img src={photos[idx]!} alt={LABELS[idx]} className="oval-img" />
-                  : <div className="oval-empty"><span className="oval-cam">📷</span></div>
-                }
+              <div className="oval-frame" onClick={photos[idx] ? undefined : () => openPhoto(idx)}>
+                {photos[idx] ? (
+                  <OvalPhoto photo={photos[idx]} onLoad={() => {}} size="small" />
+                ) : (
+                  <div className="oval-empty"><span className="oval-cam">📷</span></div>
+                )}
               </div>
-              <div className="oval-label">{LABELS[idx]}</div>
+              <div className="oval-actions">
+                <div className="oval-label">{LABELS[idx]}</div>
+                <button className="oval-change-btn" onClick={() => openPhoto(idx)} title="Загрузить фото">
+                  {photos[idx] ? "✎" : "+"}
+                </button>
+              </div>
             </div>
           ))}
 
-          {/* Central large oval photo — rows 1–5, cols 2–3 */}
-          <div
-            className="center-slot"
-            style={{ gridColumn: "2 / 4", gridRow: "1 / 6" }}
-            onClick={() => openPhoto(12)}
-          >
-            <div className="center-frame">
-              {photos[12]
-                ? <img src={photos[12]!} alt="Главное фото" className="center-img" />
-                : (
-                  <div className="center-empty">
-                    <span className="center-cam">📷</span>
-                    <span className="center-hint">Главное фото</span>
-                  </div>
-                )
-              }
+          {/* Central large oval */}
+          <div className="center-slot" style={{ gridColumn: "2 / 4", gridRow: "1 / 6" }}>
+            <div className="center-frame" onClick={photos[12] ? undefined : () => openPhoto(12)}>
+              {photos[12] ? (
+                <OvalPhoto photo={photos[12]} onLoad={() => {}} size="large" />
+              ) : (
+                <div className="center-empty">
+                  <span className="center-cam">📷</span>
+                  <span className="center-hint">Главное фото</span>
+                </div>
+              )}
             </div>
+            {photos[12] && (
+              <button className="center-change-btn" onClick={() => openPhoto(12)}>✎ Заменить</button>
+            )}
           </div>
 
-          {/* Name + subtitle block — rows 5–7, cols 2–3 */}
+          {/* Name block */}
           <div className="name-block" style={{ gridColumn: "2 / 4", gridRow: "5 / 8" }}>
             {editingName ? (
               <div className="name-edit-wrap">
@@ -140,11 +253,8 @@ export default function Index() {
                 <button className="name-ok" onClick={() => { setBabyName(nameInput || "Имя"); setEditingName(false); }}>✓</button>
               </div>
             ) : (
-              <h1
-                className="name-title"
-                onClick={() => { setEditingName(true); setNameInput(babyName); }}
-                title="Нажмите, чтобы изменить имя"
-              >{babyName}</h1>
+              <h1 className="name-title" onClick={() => { setEditingName(true); setNameInput(babyName); }}
+                title="Нажмите, чтобы изменить имя">{babyName}</h1>
             )}
             <p className="name-sub">Первый годик</p>
             <div className="name-heart">♥</div>
@@ -152,9 +262,9 @@ export default function Index() {
 
         </div>
 
-        {/* Bottom info strip */}
+        {/* Bottom info */}
         <div className="info-bar">
-          <div className="info-item" onClick={() => startEditField("date", birthDate)}>
+          <div className="info-item" onClick={() => { setEditingField("date"); setFieldInput(birthDate); }}>
             <span className="info-icon">📅</span>
             <div className="info-content">
               {editingField === "date"
@@ -165,7 +275,7 @@ export default function Index() {
             </div>
           </div>
           <div className="info-sep" />
-          <div className="info-item" onClick={() => startEditField("weight", weight)}>
+          <div className="info-item" onClick={() => { setEditingField("weight"); setFieldInput(weight); }}>
             <span className="info-icon">⚖️</span>
             <div className="info-content">
               {editingField === "weight"
@@ -176,7 +286,7 @@ export default function Index() {
             </div>
           </div>
           <div className="info-sep" />
-          <div className="info-item" onClick={() => startEditField("time", birthTime)}>
+          <div className="info-item" onClick={() => { setEditingField("time"); setFieldInput(birthTime); }}>
             <span className="info-icon">🕐</span>
             <div className="info-content">
               {editingField === "time"
