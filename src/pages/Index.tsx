@@ -1,54 +1,41 @@
 import { useState, useRef, useCallback } from "react";
 
-const MONTHS = [
-  "Январь", "Февраль", "Март", "Апрель",
-  "Май", "Июнь", "Июль", "Август",
-  "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+const LABELS = [
+  "Родилась", "1 месяц", "2 месяца", "3 месяца",
+  "4 месяца", "5 месяцев", "6 месяцев", "7 месяцев",
+  "8 месяцев", "9 месяцев", "10 месяцев", "11 месяцев",
 ];
 
-const CONFETTI_ITEMS = Array.from({ length: 55 }, (_, i) => ({
-  id: i,
-  left: Math.random() * 100,
-  top: Math.random() * 100,
-  size: Math.random() * 14 + 6,
-  color: [
-    "#FF6B6B", "#FFE66D", "#4ECDC4", "#FF8B94",
-    "#A8E6CF", "#FFB347", "#C9B1FF", "#FF6B9D",
-    "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD"
-  ][i % 12],
-  rotation: Math.random() * 360,
-  shape: i % 3,
-  animDelay: Math.random() * 8,
-  animDuration: Math.random() * 4 + 5,
-}));
-
-const STARS = Array.from({ length: 25 }, (_, i) => ({
-  id: i,
-  left: Math.random() * 100,
-  top: Math.random() * 100,
-  size: Math.random() * 20 + 10,
-  animDelay: Math.random() * 5,
-  color: ["#FFE66D", "#FFB347", "#FF6B6B", "#C9B1FF", "#4ECDC4"][i % 5],
-}));
-
-const BALLOONS = ["🎈", "🎀", "🎊", "🎉", "🌟", "✨", "💫", "🎶", "🎈", "🎀"];
-
-interface PhotoSlot {
-  month: number;
-  image: string | null;
-}
+// 5-col × 7-row grid. Small ovals around the perimeter, center area for big photo + name
+const POSITIONS: { col: number; row: number; idx: number }[] = [
+  { col: 0, row: 0, idx: 0 },   // Родилась
+  { col: 1, row: 0, idx: 1 },   // 1 месяц
+  { col: 2, row: 0, idx: 2 },   // 2 месяца
+  { col: 3, row: 0, idx: 3 },   // 3 месяца
+  { col: 3, row: 2, idx: 4 },   // 4 месяца
+  { col: 3, row: 3, idx: 5 },   // 5 месяцев
+  { col: 3, row: 4, idx: 6 },   // 6 месяцев
+  { col: 2, row: 6, idx: 7 },   // 7 месяцев
+  { col: 1, row: 6, idx: 8 },   // 8 месяцев
+  { col: 0, row: 4, idx: 9 },   // 9 месяцев
+  { col: 0, row: 3, idx: 10 },  // 10 месяцев
+  { col: 0, row: 2, idx: 11 },  // 11 месяцев
+];
 
 export default function Index() {
-  const [photos, setPhotos] = useState<PhotoSlot[]>(
-    MONTHS.map((_, i) => ({ month: i, image: null }))
-  );
-  const [babyName, setBabyName] = useState("Имя малыша");
+  const [photos, setPhotos] = useState<(string | null)[]>(Array(13).fill(null));
+  const [babyName, setBabyName] = useState("Анюта");
   const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState("Имя малыша");
+  const [nameInput, setNameInput] = useState("Анюта");
+  const [birthDate, setBirthDate] = useState("11.06.2025");
+  const [weight, setWeight] = useState("3470 г");
+  const [birthTime, setBirthTime] = useState("18:50");
+  const [editingField, setEditingField] = useState<"date" | "weight" | "time" | null>(null);
+  const [fieldInput, setFieldInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
 
-  const handleSlotClick = (idx: number) => {
+  const openPhoto = (idx: number) => {
     setActiveSlot(idx);
     setTimeout(() => fileInputRef.current?.click(), 0);
   };
@@ -58,161 +45,151 @@ export default function Index() {
     if (!file || activeSlot === null) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setPhotos(prev =>
-        prev.map((p, i) =>
-          i === activeSlot ? { ...p, image: ev.target?.result as string } : p
-        )
-      );
+      setPhotos(prev => prev.map((p, i) => i === activeSlot ? ev.target?.result as string : p));
     };
     reader.readAsDataURL(file);
     e.target.value = "";
   }, [activeSlot]);
 
-  const handleNameSave = () => {
-    setBabyName(nameInput.trim() || "Имя малыша");
-    setEditingName(false);
+  const saveField = () => {
+    if (editingField === "date") setBirthDate(fieldInput);
+    if (editingField === "weight") setWeight(fieldInput);
+    if (editingField === "time") setBirthTime(fieldInput);
+    setEditingField(null);
+  };
+
+  const startEditField = (field: "date" | "weight" | "time", val: string) => {
+    setEditingField(field);
+    setFieldInput(val);
   };
 
   return (
-    <div className="collage-root">
-      {/* Animated background particles */}
-      <div className="bg-layer" aria-hidden="true">
-        {CONFETTI_ITEMS.map(c => (
-          <div
-            key={c.id}
-            className="confetti-piece"
-            style={{
-              left: `${c.left}%`,
-              top: `${c.top}%`,
-              width: c.shape === 0 ? c.size : c.size * 0.55,
-              height: c.shape === 0 ? c.size * 0.45 : c.size,
-              background: c.color,
-              borderRadius: c.shape === 2 ? "50%" : c.shape === 1 ? "2px" : "3px",
-              transform: `rotate(${c.rotation}deg)`,
-              animationDelay: `${c.animDelay}s`,
-              animationDuration: `${c.animDuration}s`,
-            }}
-          />
-        ))}
-        {STARS.map(s => (
-          <div
-            key={s.id}
-            className="star-float"
-            style={{
-              left: `${s.left}%`,
-              top: `${s.top}%`,
-              fontSize: `${s.size}px`,
-              animationDelay: `${s.animDelay}s`,
-              color: s.color,
-            }}
-          >
-            ★
-          </div>
+    <div className="poster-root">
+      {/* Scattered hearts */}
+      <div className="hearts-layer" aria-hidden="true">
+        {[5,12,20,28,38,48,55,62,70,78,85,92,8,18,35,52,72,88].map((l, i) => (
+          <span key={i} className="deco-heart" style={{
+            left: `${l}%`,
+            top: `${[8,22,5,14,3,18,7,25,10,4,20,12,60,70,65,75,68,55][i]}%`,
+            fontSize: `${[10,14,8,12,10,16,8,11,9,13,10,8,12,9,14,10,11,8][i]}px`,
+            animationDelay: `${i * 0.3}s`,
+          }}>♥</span>
         ))}
       </div>
 
-      {/* Main collage card */}
-      <div className="collage-card">
-        {/* Header */}
-        <div className="collage-header">
-          <div className="balloons-row">
-            {BALLOONS.map((b, i) => (
-              <span
-                key={i}
-                className="balloon-emoji"
-                style={{ animationDelay: `${i * 0.12}s` }}
-              >{b}</span>
-            ))}
-          </div>
+      {/* Corner flower decorations */}
+      <div className="flower-corner tl" aria-hidden="true" />
+      <div className="flower-corner tr" aria-hidden="true" />
+      <div className="flower-corner bl" aria-hidden="true" />
+      <div className="flower-corner br" aria-hidden="true" />
 
-          <div className="title-block">
-            <h1 className="collage-title">
-              <span className="t-me">МНЕ</span>
-              <span className="t-year"> 1 ГОД</span>
-              <span className="t-excl">!</span>
-            </h1>
-            <div className="title-ribbon">✨ 12 месяцев счастья ✨</div>
-          </div>
+      <div className="poster-inner">
+        <div className="photo-layout">
 
-          {editingName ? (
-            <div className="name-edit-row">
-              <input
-                className="name-input"
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleNameSave()}
-                autoFocus
-                maxLength={30}
-                placeholder="Имя малыша"
-              />
-              <button className="name-save-btn" onClick={handleNameSave}>✓</button>
-            </div>
-          ) : (
-            <button
-              className="baby-name"
-              onClick={() => { setEditingName(true); setNameInput(babyName); }}
-              title="Нажмите, чтобы изменить имя"
-            >
-              <span className="name-star">⭐</span>
-              <span>{babyName}</span>
-              <span className="name-star">⭐</span>
-              <span className="name-pen">✏️</span>
-            </button>
-          )}
-        </div>
-
-        {/* Photo grid 4x3 */}
-        <div className="photo-grid">
-          {photos.map((slot, idx) => (
+          {/* 12 small oval slots around perimeter */}
+          {POSITIONS.map(({ col, row, idx }) => (
             <div
               key={idx}
-              className={`photo-cell ${slot.image ? "has-photo" : "empty"}`}
-              onClick={() => handleSlotClick(idx)}
-              style={{ animationDelay: `${idx * 0.05}s` }}
+              className="oval-slot"
+              style={{ gridColumn: col + 1, gridRow: row + 1 }}
+              onClick={() => openPhoto(idx)}
             >
-              {slot.image ? (
-                <>
-                  <img src={slot.image} alt={`Месяц ${idx + 1}`} className="photo-img" />
-                  <div className="photo-overlay">
-                    <span className="change-hint">📷 Заменить</span>
-                  </div>
-                </>
-              ) : (
-                <div className="photo-placeholder">
-                  <span className="ph-icon">📷</span>
-                  <span className="ph-text">Добавить фото</span>
-                </div>
-              )}
-              <div className="month-badge">
-                <span className="month-num">{idx + 1}</span>
-                <span className="month-name">{MONTHS[idx]}</span>
+              <div className="oval-frame">
+                {photos[idx]
+                  ? <img src={photos[idx]!} alt={LABELS[idx]} className="oval-img" />
+                  : <div className="oval-empty"><span className="oval-cam">📷</span></div>
+                }
               </div>
+              <div className="oval-label">{LABELS[idx]}</div>
             </div>
           ))}
+
+          {/* Central large oval photo — rows 1–5, cols 2–3 */}
+          <div
+            className="center-slot"
+            style={{ gridColumn: "2 / 4", gridRow: "1 / 6" }}
+            onClick={() => openPhoto(12)}
+          >
+            <div className="center-frame">
+              {photos[12]
+                ? <img src={photos[12]!} alt="Главное фото" className="center-img" />
+                : (
+                  <div className="center-empty">
+                    <span className="center-cam">📷</span>
+                    <span className="center-hint">Главное фото</span>
+                  </div>
+                )
+              }
+            </div>
+          </div>
+
+          {/* Name + subtitle block — rows 5–7, cols 2–3 */}
+          <div className="name-block" style={{ gridColumn: "2 / 4", gridRow: "5 / 8" }}>
+            {editingName ? (
+              <div className="name-edit-wrap">
+                <input
+                  className="name-inp"
+                  value={nameInput}
+                  onChange={e => setNameInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") { setBabyName(nameInput || "Имя"); setEditingName(false); }
+                  }}
+                  autoFocus
+                  maxLength={20}
+                />
+                <button className="name-ok" onClick={() => { setBabyName(nameInput || "Имя"); setEditingName(false); }}>✓</button>
+              </div>
+            ) : (
+              <h1
+                className="name-title"
+                onClick={() => { setEditingName(true); setNameInput(babyName); }}
+                title="Нажмите, чтобы изменить имя"
+              >{babyName}</h1>
+            )}
+            <p className="name-sub">Первый годик</p>
+            <div className="name-heart">♥</div>
+          </div>
+
         </div>
 
-        {/* Footer */}
-        <div className="collage-footer">
-          <div className="footer-emojis">
-            {["🎂", "✨", "🎈", "💛", "🌟", "🎊", "💕", "🎶", "🍰", "🌈"].map((e, i) => (
-              <span
-                key={i}
-                className="footer-emoji"
-                style={{ animationDelay: `${i * 0.18}s` }}
-              >{e}</span>
-            ))}
+        {/* Bottom info strip */}
+        <div className="info-bar">
+          <div className="info-item" onClick={() => startEditField("date", birthDate)}>
+            <span className="info-icon">📅</span>
+            <div className="info-content">
+              {editingField === "date"
+                ? <input className="info-inp" value={fieldInput} onChange={e => setFieldInput(e.target.value)} onKeyDown={e => e.key === "Enter" && saveField()} onBlur={saveField} autoFocus />
+                : <span className="info-val">{birthDate}</span>
+              }
+              <span className="info-lbl">Дата рождения</span>
+            </div>
           </div>
-          <p className="footer-hint">Нажми на ячейку, чтобы добавить фото</p>
+          <div className="info-sep" />
+          <div className="info-item" onClick={() => startEditField("weight", weight)}>
+            <span className="info-icon">⚖️</span>
+            <div className="info-content">
+              {editingField === "weight"
+                ? <input className="info-inp" value={fieldInput} onChange={e => setFieldInput(e.target.value)} onKeyDown={e => e.key === "Enter" && saveField()} onBlur={saveField} autoFocus />
+                : <span className="info-val">{weight}</span>
+              }
+              <span className="info-lbl">Вес при рождении</span>
+            </div>
+          </div>
+          <div className="info-sep" />
+          <div className="info-item" onClick={() => startEditField("time", birthTime)}>
+            <span className="info-icon">🕐</span>
+            <div className="info-content">
+              {editingField === "time"
+                ? <input className="info-inp" value={fieldInput} onChange={e => setFieldInput(e.target.value)} onKeyDown={e => e.key === "Enter" && saveField()} onBlur={saveField} autoFocus />
+                : <span className="info-val">{birthTime}</span>
+              }
+              <span className="info-lbl">Время рождения</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: "none" }}
-        onChange={handleFileChange}
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
     </div>
   );
 }
